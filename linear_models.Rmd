@@ -12,7 +12,7 @@ library(broom.mixed)
 set.seed(1)
 ```
 
-model fitting
+# model fitting
 
 ```{r}
 data("nyc_airbnb")
@@ -45,7 +45,7 @@ fit = lm(price ~ stars + borough, data = nyc_airbnb)
 
 ```
 
-Tidying output
+# Tidying output
 
 untidy fit results
 
@@ -71,7 +71,7 @@ fit %>%
   knitr::kable(digits = 3)
 ```
 
-Diagnostics
+# Diagnostics
 
 ```{r}
 modelr::add_residuals(nyc_airbnb, fit)
@@ -88,7 +88,7 @@ nyc_airbnb %>%
   ggplot(aes(x = stars, y = resid)) + geom_point()
 ```
 
-Hypothesis testing
+# Hypothesis testing
 
 ```{r}
 fit_null = lm(price ~ stars + borough, data = nyc_airbnb)
@@ -100,7 +100,7 @@ anova(fit_null, fit_alt) %>%
   broom::tidy()
 ```
 
-Nesting data
+# Nesting data
 
 ```{r}
 nyc_airbnb %>% 
@@ -161,5 +161,45 @@ fit a mixed model
 manhattan_airbnb %>% 
   lme4::lmer(price ~ stars + room_type + (1 + room_type | neighborhood), data = .) %>% 
   broom.mixed::tidy()
+```
+
+# Binary outcomes
+
+import and clean data
+
+```{r}
+baltimore_df = 
+  read_csv("data/homicide_data.csv") %>% 
+  filter(city == "Baltimore") %>% 
+  mutate(
+    resolved = as.numeric(disposition == "Closed by arrest"),
+    victim_age = as.numeric(victim_age),
+    victim_race = fct_relevel(victim_race, "White")) %>% 
+  select(resolved, victim_age, victim_race, victim_sex)
+```
+
+fit a logistic regression 
+
+```{r}
+fit_logistic = 
+  baltimore_df %>% 
+  glm(resolved ~ victim_age + victim_race + victim_sex, data = ., family = binomial()) 
+```
+
+summarize coefficients from glm fits
+
+```{r}
+fit_logistic %>% 
+  broom::tidy() %>% 
+  mutate(OR = exp(estimate)) %>%
+  select(term, log_OR = estimate, OR, p.value) %>% 
+  knitr::kable(digits = 3)
+```
+compute fitted values
+
+```{r}
+baltimore_df %>% 
+  modelr::add_predictions(fit_logistic) %>% 
+  mutate(fitted_prob = boot::inv.logit(pred))
 ```
 
