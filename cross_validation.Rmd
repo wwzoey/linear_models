@@ -1,0 +1,92 @@
+---
+title: "cross_validation"
+author: "Wenzhao Wu"
+date: "11/22/2020"
+output: github_document
+---
+
+```{r setup}
+library(tidyverse)
+library(modelr)
+library(mgcv)
+```
+
+# CV by hand
+
+simulate data under a non-linear model
+
+```{r}
+nonlin_df = 
+  tibble(
+    id = 1:100,
+    x = runif(100, 0, 1),
+    y = 1 - 10 * (x - .3) ^ 2 + rnorm(100, 0, .3)
+  )
+
+nonlin_df %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point()
+```
+split data
+
+```{r}
+train_df = sample_n(nonlin_df, 80)
+test_df = anti_join(nonlin_df, train_df, by = "id")
+
+ggplot(train_df, aes(x = x, y = y)) + 
+  geom_point() + 
+  geom_point(data = test_df, color = "red")
+```
+
+fit 3 models to training data
+
+```{r}
+linear_mod = lm(y ~ x, data = train_df)
+smooth_mod = mgcv::gam(y ~ s(x), data = train_df)
+wiggly_mod = mgcv::gam(y ~ s(x, k = 30), sp = 10e-6, data = train_df)
+```
+
+plot smooth model
+
+```{r}
+train_df %>% 
+  add_predictions(smooth_mod) %>% 
+  ggplot(aes(x = x, y = y)) + geom_point() + 
+  geom_line(aes(y = pred), color = "red")
+```
+
+plot wiggly model
+
+```{r}
+train_df %>% 
+  add_predictions(wiggly_mod) %>% 
+  ggplot(aes(x = x, y = y)) + geom_point() + 
+  geom_line(aes(y = pred), color = "red")
+```
+
+```{r}
+train_df %>% 
+  gather_predictions(linear_mod, smooth_mod, wiggly_mod) %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point() + 
+  geom_line(aes(y = pred), color = "red") + 
+  facet_wrap(~model)
+```
+
+compute root mean squared errors
+
+```{r}
+rmse(linear_mod, test_df)
+rmse(smooth_mod, test_df)
+rmse(wiggly_mod, test_df)
+```
+
+
+# CV using `modelr`
+
+```{r}
+cv_df = 
+  crossv_mc(nonlin_df, 100) 
+```
+
