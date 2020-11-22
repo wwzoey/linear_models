@@ -189,3 +189,71 @@ boot_straps %>%
     ## `geom_smooth()` using formula 'y ~ x'
 
 ![](bootstrapping_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+# Analyzing bootstrap samples
+
+``` r
+bootstrap_results = 
+  boot_straps %>% 
+  mutate(
+    models = map(strap_sample, ~lm(y ~ x, data = .x) ),
+    results = map(models, broom::tidy)) %>% 
+  select(-strap_sample, -models) %>% 
+  unnest(results) 
+
+bootstrap_results %>% 
+  group_by(term) %>% 
+  summarize(boot_se = sd(estimate)) %>% 
+  knitr::kable(digits = 3)
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+| term        | boot\_se |
+| :---------- | -------: |
+| (Intercept) |    0.075 |
+| x           |    0.101 |
+
+construct 95% CI across bootstrap samples
+
+``` r
+bootstrap_results %>% 
+  group_by(term) %>% 
+  summarize(
+    ci_lower = quantile(estimate, 0.025), 
+    ci_upper = quantile(estimate, 0.975))
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        ci_lower ci_upper
+    ##   <chr>          <dbl>    <dbl>
+    ## 1 (Intercept)     1.79     2.08
+    ## 2 x               2.91     3.31
+
+show fitted lines for each bootstrap sample
+
+``` r
+boot_straps %>% 
+  unnest(strap_sample) %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_line(aes(group = strap_number), stat = "smooth", method = "lm", se = FALSE, alpha = .1, color = "blue") +
+  geom_point(data = sim_df_nonconst, alpha = .5) 
+```
+
+    ## `geom_smooth()` using formula 'y ~ x'
+
+![](bootstrapping_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
+# Bootstrap using `modelr`
+
+``` r
+boot_straps = 
+  sim_df_nonconst %>% 
+  modelr::bootstrap(n = 1000)
+
+boot_straps$strap[[1]]
+```
+
+    ## <resample [250 x 3]> 8, 132, 69, 225, 180, 122, 34, 170, 216, 122, ...
