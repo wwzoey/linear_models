@@ -115,19 +115,19 @@ compute root mean squared errors
 rmse(linear_mod, test_df)
 ```
 
-    ## [1] 0.6852716
+    ## [1] 0.9499454
 
 ``` r
 rmse(smooth_mod, test_df)
 ```
 
-    ## [1] 0.377991
+    ## [1] 0.3716533
 
 ``` r
 rmse(wiggly_mod, test_df)
 ```
 
-    ## [1] 0.476565
+    ## [1] 0.4314551
 
 # CV using `modelr`
 
@@ -141,18 +141,18 @@ cv_df %>% pull(train) %>% .[[1]] %>% as_tibble
 ```
 
     ## # A tibble: 79 x 3
-    ##       id       x       y
-    ##    <int>   <dbl>   <dbl>
-    ##  1     3 0.624    0.272 
-    ##  2     4 0.822   -1.09  
-    ##  3     5 0.388    0.600 
-    ##  4     6 0.767   -1.22  
-    ##  5     7 0.00328 -0.0580
-    ##  6     9 0.843   -1.63  
-    ##  7    11 0.979   -3.26  
-    ##  8    13 0.475    0.337 
-    ##  9    14 0.400    0.482 
-    ## 10    15 0.580    0.376 
+    ##       id     x      y
+    ##    <int> <dbl>  <dbl>
+    ##  1     1 0.311  0.950
+    ##  2     2 0.913 -2.89 
+    ##  3     4 0.392  0.759
+    ##  4     5 0.266  1.11 
+    ##  5    10 0.476  0.624
+    ##  6    11 0.235  0.921
+    ##  7    12 0.978 -3.46 
+    ##  8    14 0.886 -2.25 
+    ##  9    15 0.946 -3.03 
+    ## 10    16 0.398  0.798
     ## # ... with 69 more rows
 
 ``` r
@@ -160,18 +160,18 @@ cv_df %>% pull(test) %>% .[[1]] %>% as_tibble
 ```
 
     ## # A tibble: 21 x 3
-    ##       id      x      y
-    ##    <int>  <dbl>  <dbl>
-    ##  1     1 0.232   1.21 
-    ##  2     2 0.0232  0.618
-    ##  3     8 0.705  -0.653
-    ##  4    10 0.0128  0.434
-    ##  5    12 0.0589  0.447
-    ##  6    17 0.542   0.280
-    ##  7    26 0.455   1.25 
-    ##  8    30 0.678  -0.255
-    ##  9    32 0.102   0.414
-    ## 10    36 0.173   0.982
+    ##       id      x       y
+    ##    <int>  <dbl>   <dbl>
+    ##  1     3 0.934  -3.54  
+    ##  2     6 0.279   1.37  
+    ##  3     7 0.643   0.0588
+    ##  4     8 0.518   0.527 
+    ##  5     9 0.0685  0.682 
+    ##  6    13 0.148   0.878 
+    ##  7    22 0.228   0.844 
+    ##  8    23 0.549   0.614 
+    ##  9    25 0.439   0.224 
+    ## 10    34 0.0358  0.639 
     ## # ... with 11 more rows
 
 ``` r
@@ -212,3 +212,93 @@ cv_df %>%
 ```
 
 ![](cross_validation_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+
+# Child growth
+
+``` r
+child_growth = read_csv("./data/nepalese_children.csv")
+```
+
+    ## Parsed with column specification:
+    ## cols(
+    ##   age = col_double(),
+    ##   sex = col_double(),
+    ##   weight = col_double(),
+    ##   height = col_double(),
+    ##   armc = col_double()
+    ## )
+
+``` r
+child_growth %>% 
+  ggplot(aes(x = weight, y = armc)) + 
+  geom_point(alpha = .5)
+```
+
+![](cross_validation_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+
+add a “change point term” to the dataframe
+
+``` r
+child_growth =
+  child_growth %>% 
+  mutate(weight_cp = (weight > 7) * (weight - 7))
+```
+
+fit three candidate models
+
+``` r
+linear_mod = lm(armc ~ weight, data = child_growth)
+pwl_mod    = lm(armc ~ weight + weight_cp, data = child_growth)
+smooth_mod = gam(armc ~ s(weight), data = child_growth)
+```
+
+plot three models to check for the goodness of fit
+
+``` r
+child_growth %>% 
+  gather_predictions(linear_mod, pwl_mod, smooth_mod) %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = weight, y = armc)) + 
+  geom_point(alpha = .5) +
+  geom_line(aes(y = pred), color = "red") + 
+  facet_grid(~model)
+```
+
+![](cross_validation_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+
+``` r
+cv_df =
+  crossv_mc(child_growth, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+```
+
+``` r
+cv_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod  = map(train, ~lm(armc ~ weight, data = .x)),
+    pwl_mod     = map(train, ~lm(armc ~ weight + weight_cp, data = .x)),
+    smooth_mod  = map(train, ~gam(armc ~ s(weight), data = as_tibble(.x)))) %>% 
+  mutate(
+    rmse_linear = map2_dbl(linear_mod, test, ~rmse(model = .x, data = .y)),
+    rmse_pwl    = map2_dbl(pwl_mod, test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2_dbl(smooth_mod, test, ~rmse(model = .x, data = .y)))
+```
+
+plot prediction error distribution for each candidate model
+
+``` r
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+
+![](cross_validation_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
