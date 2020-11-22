@@ -45,3 +45,29 @@ fit = lm(price ~ stars + borough, data = nyc_airbnb)
 
 ```
 
+Tidying output
+
+untidy fit results
+
+```{r}
+summary(fit)
+summary(fit)$coef
+coef(fit)
+fitted.values(fit)
+```
+
+tidy results
+
+```{r}
+fit %>% 
+  broom::glance()
+```
+
+```{r}
+fit %>% 
+  broom::tidy() %>% 
+  select(term, estimate, p.value) %>% 
+  mutate(term = str_replace(term, "^borough", "Borough: ")) %>% 
+  knitr::kable(digits = 3)
+```
+
